@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bearing Monitoring Dashboard</title>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="header">
+        <div class="card" style="flex: 1;">
+            <button id="btnConnect" class="btn-connect" onclick="connectBLE()">CONNECT ESP32 (BLE)</button>
+            <div style="margin-top: 10px;">
+                <button class="btn-start" onclick="sendCommand('START')">START</button>
+                <button class="btn-stop" onclick="sendCommand('STOP')">STOP</button>
+            </div>
+        </div>
+        <div class="card" style="flex: 2; display: flex; gap: 15px; align-items: center;">
+            <div>
+                <label for="inputRpm">RPM Mesin</label><br>
+                <input type="number" id="inputRpm" value="1500" class="input-field">
+            </div>
+            <div>
+                <label for="inputWarn">Warn Limit (m/s²)</label><br>
+                <input type="number" id="inputWarn" value="2.8" step="0.1" class="input-field">
+            </div>
+            <div>
+                <label for="inputDang">Danger Limit (m/s²)</label><br>
+                <input type="number" id="inputDang" value="4.5" step="0.1" class="input-field">
+            </div>
+        </div>
+        <div class="card" style="flex: 1; text-align: center;">
+            <div>STATUS SISTEM</div>
+            <div style="margin: 10px 0;">
+                <span id="statusText" class="status-badge status-disconnected">DISCONNECTED</span>
+            </div>
+            <button class="btn-csv" onclick="downloadCSV()">💾 Download CSV Log</button>
+        </div>
+    </div>
+
+    <div class="grid">
+        <div class="card">
+            <h3>VIBRATION ANALYSIS (LIVE WAVEFORM)</h3>
+            <div class="chart-container"><canvas id="chartWaveform"></canvas></div>
+        </div>
+        <div class="card">
+            <h3>3-AXIS ACCELERATION (RAW X, Y, Z)</h3>
+            <div class="chart-container"><canvas id="chart3Axis"></canvas></div>
+        </div>
+        <div class="card">
+            <h3 id="spectrumHeader">SPECTRUM (FFT ANALYSIS)</h3>
+            <div class="chart-container"><canvas id="chartFFT"></canvas></div>
+        </div>
+        <div class="card">
+            <h3>TREND (RMS OVER TIME) - <span id="rmsVal">0.00 M/S²</span></h3>
+            <div class="chart-container"><canvas id="chartRMS"></canvas></div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
