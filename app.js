@@ -10,7 +10,7 @@ let isRunning = true;
 let isSimulating = false;
 let simInterval = null;
 
-// Konfigurasi Grafik Auto-Scale
+// Konfigurasi Grafik dengan Auto-Scale Sumbu Y
 const chartCtxOptions = { 
     responsive: true, 
     maintainAspectRatio: false, 
@@ -19,7 +19,8 @@ const chartCtxOptions = {
         x: { display: true },
         y: { 
             beginAtZero: false,
-            grace: '10%' // Menyesuaikan skala otomatis jika nilai vibrasi sangat kecil
+            suggestedMin: -1,
+            suggestedMax: 1
         }
     }
 };
@@ -110,23 +111,28 @@ async function connectBLE() {
             statusElem.className = 'status-badge status-connected';
         }
     } catch (err) {
-        alert("Koneksi BLE Gagal: " + err);
+        alert("Koneksi BLE Gagal/Dibatalkan. Masuk ke Mode Simulasi.");
+        startSimulation();
     }
 }
 
 async function sendCommand(cmd) {
-    if (cmd === 'START') isRunning = true;
-    if (cmd === 'STOP') isRunning = false;
+    if (cmd === 'START') {
+        isRunning = true;
+        if (!bleCharacteristic && !isSimulating) startSimulation();
+    }
+    if (cmd === 'STOP') {
+        isRunning = false;
+        stopSimulation();
+    }
 
     if (bleCharacteristic) {
         try {
             const encoder = new TextEncoder();
             await bleCharacteristic.writeValue(encoder.encode(cmd));
         } catch (e) {
-            console.error("Gagal mengirim perintah:", e);
+            console.error("Gagal mengirim perintah ke BLE:", e);
         }
-    } else if (!isSimulating) {
-        startSimulation();
     }
 }
 
@@ -137,31 +143,31 @@ function startSimulation() {
     
     const statusElem = document.getElementById('statusText');
     if (statusElem) {
-        statusElem.innerText = 'SIMULATING';
+        statusElem.innerText = 'SIMULATING (TEST MODE)';
         statusElem.className = 'status-badge status-connected';
     }
 
     let t = 0;
     simInterval = setInterval(() => {
         if (!isRunning) return;
-        t += 0.2;
-        const ax = (Math.sin(t) * 1.5 + (Math.random() - 0.5) * 0.2).toFixed(2);
-        const ay = (Math.cos(t * 1.2) * 1.1 + (Math.random() - 0.5) * 0.2).toFixed(2);
-        const az = (Math.sin(t * 2.5) * 2.0 + (Math.random() - 0.5) * 0.4).toFixed(2);
-        const rms = Math.sqrt((ax*ax + ay*ay + az*az)/3).toFixed(2);
-        const peakHz = (100 + Math.sin(t) * 20).toFixed(1);
-        const peakAmp = Math.abs(az);
+        t += 0.3;
+        const ax = parseFloat((Math.sin(t) * 2.5 + (Math.random() - 0.5) * 0.5).toFixed(2));
+        const ay = parseFloat((Math.cos(t * 1.5) * 1.8 + (Math.random() - 0.5) * 0.5).toFixed(2));
+        const az = parseFloat((Math.sin(t * 2.0) * 3.2 + (Math.random() - 0.5) * 0.8).toFixed(2));
+        const rms = parseFloat(Math.sqrt((ax*ax + ay*ay + az*az)/3).toFixed(2));
+        const peakHz = parseFloat((120 + Math.sin(t) * 30).toFixed(1));
+        const peakAmp = parseFloat(Math.abs(az).toFixed(2));
 
         const mockJSON = JSON.stringify({
-            RMS_ms2: rms,
-            AccX: ax,
-            AccY: ay,
-            AccZ: az,
-            PeakHz: peakHz,
-            PeakAmp: peakAmp
+            rms: rms,
+            x: ax,
+            y: ay,
+            z: az,
+            peakHz: peakHz,
+            peakAmp: peakAmp
         });
         onDataReceived(mockJSON);
-    }, 200);
+    }, 250);
 }
 
 function stopSimulation() {
@@ -191,7 +197,7 @@ function checkAlarmStatus(rmsVal) {
     if (!statusElem) return;
 
     if (rmsVal >= dangerLimit) {
-        statusElem.innerText = "STATUS: DANGER (SANGAT TINGGI)";
+        statusElem.innerText = "STATUS: DANGER (VIBRASI SANGAT TINGGI)";
         statusElem.style.color = "#ff4d4d";
     } else if (rmsVal >= warnLimit) {
         statusElem.innerText = "STATUS: WARNING (PERINGATAN)";
@@ -215,36 +221,37 @@ function onDataReceived(jsonString) {
 
         const data = JSON.parse(validStr);
 
-        const rms     = parseFloat(data.RMS_ms2 ?? data.R) || 0;
-        const accX    = parseFloat(data.AccX ?? data.X) || 0;
-        const accY    = parseFloat(data.AccY ?? data.Y) || 0;
-        const accZ    = parseFloat(data.AccZ ?? data.Z) || 0;
-        const peakHz  = parseFloat(data.PeakHz ?? data.F) || 0;
-        const peakAmp = parseFloat(data.PeakAmp ?? data.A) || 0;
+        // Fleksibilitas Pembacaan Variabel (Mendukung Huruf Besar & Kecil)
+        const rms     = parseFloat(data.rms ?? data.RMS_ms2 ?? data.RMS ?? data.R) || 0;
+        const accX    = parseFloat(data.x ?? data.AccX ?? data.X) || 0;
+        const accY    = parseFloat(data.y ?? data.AccY ?? data.Y) || 0;
+        const accZ    = parseFloat(data.z ?? data.AccZ ?? data.Z) || 0;
+        const peakHz  = parseFloat(data.peakHz ?? data.PeakHz ?? data.F) || 0;
+        const peakAmp = parseFloat(data.peakAmp ?? data.PeakAmp ?? data.A) || 0;
         const timeStr = new Date().toLocaleTimeString('id-ID');
 
-        // Ambil nilai RPM dari UI
+        // Ambil Nilai RPM
         const currentRPM = parseFloat(document.getElementById('rpmInput')?.value) || 1500;
         const freq1X = (currentRPM / 60).toFixed(1);
 
-        // Update Text Display
+        // Update Text Tampilan
         const rmsElem = document.getElementById('rmsVal');
         const specHeader = document.getElementById('spectrumHeader');
         if (rmsElem) rmsElem.innerText = `${rms.toFixed(2)} M/S²`;
         if (specHeader) specHeader.innerText = `SPECTRUM (PEAK: ${peakAmp.toFixed(2)} M/S² @ ${peakHz.toFixed(1)} HZ | 1X: ${freq1X} HZ)`;
 
-        // Cek Peringatan Warning/Danger
+        // Evaluasi Limit Alarm
         checkAlarmStatus(rms);
 
-        // Simpan Data Log
+        // Simpan Log
         logData.push({ timestamp: timeStr, rms, accX, accY, accZ, peakHz, rpm: currentRPM });
 
-        // Push Data ke Grafik
+        // Update Grafik Line
         pushDataToChart(chartWaveform, timeStr, [accZ]);
         pushDataToChart(chart3Axis, timeStr, [accX, accY, accZ]);
         pushDataToChart(chartRMS, timeStr, [rms]);
 
-        // Update Spektrum FFT
+        // Update Grafik Spektrum FFT
         const amp1X   = parseFloat((peakAmp * 0.85).toFixed(2));
         const amp2X   = parseFloat((peakAmp * 0.40).toFixed(2));
         const amp3X   = parseFloat((peakAmp * 0.15).toFixed(2));
