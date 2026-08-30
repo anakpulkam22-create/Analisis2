@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Monitoring Bearing Spindle</title>
+    <!-- Memanggil CSS -->
+    <link rel="stylesheet" href="style.css">
+    <!-- Chart.js Library via CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+    <header class="navbar">
+        <h2>MONITORING VIBRASI & SPINDLE</h2>
+        <div id="statusText" class="status-badge status-disconnected">DISCONNECTED</div>
+    </header>
+
+    <main class="container">
+        <!-- Control Panel -->
+        <section class="card control-panel">
+            <button class="btn btn-connect" onclick="connectBLE()">Konek BLE</button>
+            <button class="btn btn-start" onclick="sendCommand('START')">Start Data</button>
+            <button class="btn btn-stop" onclick="sendCommand('STOP')">Stop Data</button>
+            <button class="btn btn-download" onclick="downloadCSV()">Export CSV</button>
+        </section>
+
+        <!-- Display RMS Overall -->
+        <section class="card metric-card">
+            <h3>NILAI RMS OVERALL</h3>
+            <h1 id="rmsVal">0.00 M/S²</h1>
+        </section>
+
+        <!-- Grid Grafik -->
+        <section class="chart-grid">
+            <div class="card chart-box">
+                <p class="chart-title">Waveform Z (Realtime)</p>
+                <div class="canvas-wrapper">
+                    <canvas id="chartWaveform"></canvas>
+                </div>
+            </div>
+
+            <div class="card chart-box">
+                <p class="chart-title">3-Axis Acceleration (X, Y, Z)</p>
+                <div class="canvas-wrapper">
+                    <canvas id="chart3Axis"></canvas>
+                </div>
+            </div>
+
+            <div class="card chart-box">
+                <p class="chart-title" id="spectrumHeader">SPECTRUM (PEAK: 0.00 M/S² @ 0.0 HZ)</p>
+                <div class="canvas-wrapper">
+                    <canvas id="chartFFT"></canvas>
+                </div>
+            </div>
+
+            <div class="card chart-box">
+                <p class="chart-title">RMS Trend History</p>
+                <div class="canvas-wrapper">
+                    <canvas id="chartRMS"></canvas>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- PEMANGGILAN JAVASCRIPT UTAMA (Wajib ditaruh di paling bawah sebelum </body>) -->
+    <script src="app.js"></script>
+</body>
+</html>
