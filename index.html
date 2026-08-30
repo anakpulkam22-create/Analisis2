@@ -4,9 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard Monitoring Bearing Spindle</title>
-    <!-- Memanggil CSS -->
     <link rel="stylesheet" href="style.css">
-    <!-- Chart.js Library via CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
@@ -25,10 +23,27 @@
             <button class="btn btn-download" onclick="downloadCSV()">Export CSV</button>
         </section>
 
+        <!-- Configuration Panel (RPM & Limits) -->
+        <section class="card config-panel" style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 20px;">
+            <div>
+                <label for="rpmInput"><b>Spindle RPM:</b></label><br>
+                <input type="number" id="rpmInput" value="1500" style="padding: 5px; width: 100px;">
+            </div>
+            <div>
+                <label for="warnInput"><b>Warn Limit (m/s²):</b></label><br>
+                <input type="number" id="warnInput" value="1.8" step="0.1" style="padding: 5px; width: 100px;">
+            </div>
+            <div>
+                <label for="dangerInput"><b>Danger Limit (m/s²):</b></label><br>
+                <input type="number" id="dangerInput" value="4.5" step="0.1" style="padding: 5px; width: 100px;">
+            </div>
+        </section>
+
         <!-- Display RMS Overall -->
         <section class="card metric-card">
             <h3>NILAI RMS OVERALL</h3>
             <h1 id="rmsVal">0.00 M/S²</h1>
+            <p id="alarmStatus" style="font-weight: bold; color: #00e676;">STATUS: NORMAL</p>
         </section>
 
         <!-- Grid Grafik -->
@@ -63,7 +78,6 @@
         </section>
     </main>
 
-    <!-- PEMANGGILAN JAVASCRIPT UTAMA (Wajib ditaruh di paling bawah sebelum </body>) -->
     <script src="app.js"></script>
 </body>
 </html>
