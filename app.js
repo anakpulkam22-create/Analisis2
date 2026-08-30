@@ -1,29 +1,29 @@
-// Konfigurasi BLE UUID
 const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
 const CHARACTERISTIC_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
 
 let bleCharacteristic;
-let bleBuffer = ""; // Buffer untuk menyambung potongan data BLE
+let bleBuffer = "";
 let logData = [];
 const MAX_POINTS = 20;
 
-// Status & Mode Simulasi
 let isRunning = true;
 let isSimulating = false;
 let simInterval = null;
 
-// Konfigurasi Umum Grafik
+// Konfigurasi Grafik Auto-Scale
 const chartCtxOptions = { 
     responsive: true, 
     maintainAspectRatio: false, 
     animation: false,
     scales: {
         x: { display: true },
-        y: { beginAtZero: true }
+        y: { 
+            beginAtZero: false,
+            grace: '10%' // Menyesuaikan skala otomatis jika nilai vibrasi sangat kecil
+        }
     }
 };
 
-// 1. Grafik Waveform Z (Live Waveform)
 const chartWaveform = new Chart(document.getElementById('chartWaveform'), {
     type: 'line',
     data: { 
@@ -33,28 +33,26 @@ const chartWaveform = new Chart(document.getElementById('chartWaveform'), {
             data: [], 
             borderColor: '#00bcd4', 
             borderWidth: 2,
-            pointRadius: 0,
+            pointRadius: 2,
             fill: false 
         }] 
     },
     options: chartCtxOptions
 });
 
-// 2. Grafik 3-Axis Acceleration
 const chart3Axis = new Chart(document.getElementById('chart3Axis'), {
     type: 'line',
     data: {
         labels: [],
         datasets: [
-            { label: 'X', data: [], borderColor: '#ff4d4d', borderWidth: 1.5, pointRadius: 0, fill: false },
-            { label: 'Y', data: [], borderColor: '#00e676', borderWidth: 1.5, pointRadius: 0, fill: false },
-            { label: 'Z', data: [], borderColor: '#ffb300', borderWidth: 1.5, pointRadius: 0, fill: false }
+            { label: 'X', data: [], borderColor: '#ff4d4d', borderWidth: 1.5, pointRadius: 2, fill: false },
+            { label: 'Y', data: [], borderColor: '#00e676', borderWidth: 1.5, pointRadius: 2, fill: false },
+            { label: 'Z', data: [], borderColor: '#ffb300', borderWidth: 1.5, pointRadius: 2, fill: false }
         ]
     },
     options: chartCtxOptions
 });
 
-// 3. Grafik Spektrum Harmonis Spindle & Bearing
 const chartFFT = new Chart(document.getElementById('chartFFT'), {
     type: 'line',
     data: { 
@@ -67,19 +65,12 @@ const chartFFT = new Chart(document.getElementById('chartFFT'), {
             borderWidth: 2,
             tension: 0.4,
             fill: true,
-            pointBackgroundColor: '#ffffff',
             pointRadius: 4
         }] 
     },
-    options: {
-        ...chartCtxOptions,
-        scales: {
-            y: { beginAtZero: true, min: 0 }
-        }
-    }
+    options: chartCtxOptions
 });
 
-// 4. Grafik RMS Trend
 const chartRMS = new Chart(document.getElementById('chartRMS'), {
     type: 'line',
     data: { 
@@ -89,7 +80,6 @@ const chartRMS = new Chart(document.getElementById('chartRMS'), {
     options: chartCtxOptions
 });
 
-// Fungsi Koneksi BLE dengan Stream Buffer
 async function connectBLE() {
     stopSimulation();
     try {
@@ -105,14 +95,11 @@ async function connectBLE() {
         await bleCharacteristic.startNotifications();
         bleCharacteristic.addEventListener('characteristicvaluechanged', (event) => {
             const decoder = new TextDecoder('utf-8');
-            const chunk = decoder.decode(event.target.value);
-            
-            bleBuffer += chunk; // Gabungkan potongan data BLE
+            bleBuffer += decoder.decode(event.target.value);
 
-            // Jika menemukan karakter penutup objek JSON
             if (bleBuffer.includes('}') || bleBuffer.includes('\n')) {
                 const rawString = bleBuffer;
-                bleBuffer = ""; // Reset buffer
+                bleBuffer = "";
                 onDataReceived(rawString);
             }
         });
@@ -127,7 +114,6 @@ async function connectBLE() {
     }
 }
 
-// Kirim Perintah START / STOP
 async function sendCommand(cmd) {
     if (cmd === 'START') isRunning = true;
     if (cmd === 'STOP') isRunning = false;
@@ -144,7 +130,6 @@ async function sendCommand(cmd) {
     }
 }
 
-// Mode Simulasi Dummy
 function startSimulation() {
     if (isSimulating) return;
     isSimulating = true;
@@ -184,7 +169,6 @@ function stopSimulation() {
     if (simInterval) clearInterval(simInterval);
 }
 
-// Helper push data ke Chart.js secara aman
 function pushDataToChart(chart, label, values) {
     if (chart.data.labels.length >= MAX_POINTS) {
         chart.data.labels.shift();
@@ -199,26 +183,38 @@ function pushDataToChart(chart, label, values) {
     chart.update('none');
 }
 
-// Pemrosesan Data JSON Utama
+function checkAlarmStatus(rmsVal) {
+    const warnLimit = parseFloat(document.getElementById('warnInput')?.value) || 1.8;
+    const dangerLimit = parseFloat(document.getElementById('dangerInput')?.value) || 4.5;
+    const statusElem = document.getElementById('alarmStatus');
+
+    if (!statusElem) return;
+
+    if (rmsVal >= dangerLimit) {
+        statusElem.innerText = "STATUS: DANGER (SANGAT TINGGI)";
+        statusElem.style.color = "#ff4d4d";
+    } else if (rmsVal >= warnLimit) {
+        statusElem.innerText = "STATUS: WARNING (PERINGATAN)";
+        statusElem.style.color = "#ffb300";
+    } else {
+        statusElem.innerText = "STATUS: NORMAL";
+        statusElem.style.color = "#00e676";
+    }
+}
+
 function onDataReceived(jsonString) {
     if (!isRunning) return;
 
     try {
-        // 1. Ekstrak string JSON utuh dari kurung kurawal { ... }
         const startIdx = jsonString.indexOf('{');
         const endIdx = jsonString.lastIndexOf('}');
         if (startIdx === -1 || endIdx === -1 || startIdx >= endIdx) return;
 
         let validStr = jsonString.substring(startIdx, endIdx + 1);
-
-        // 2. Sanitasi nilai nan / NaN / null agar JSON.parse tidak crash
-        validStr = validStr
-            .replace(/:\s*nan/gi, ':0')
-            .replace(/:\s*null/gi, ':0');
+        validStr = validStr.replace(/:\s*nan/gi, ':0').replace(/:\s*null/gi, ':0');
 
         const data = JSON.parse(validStr);
 
-        // 3. Peta data (mendukung key panjang "RMS_ms2" maupun key ringkas "R")
         const rms     = parseFloat(data.RMS_ms2 ?? data.R) || 0;
         const accX    = parseFloat(data.AccX ?? data.X) || 0;
         const accY    = parseFloat(data.AccY ?? data.Y) || 0;
@@ -227,21 +223,28 @@ function onDataReceived(jsonString) {
         const peakAmp = parseFloat(data.PeakAmp ?? data.A) || 0;
         const timeStr = new Date().toLocaleTimeString('id-ID');
 
-        // Update Teks Layar
+        // Ambil nilai RPM dari UI
+        const currentRPM = parseFloat(document.getElementById('rpmInput')?.value) || 1500;
+        const freq1X = (currentRPM / 60).toFixed(1);
+
+        // Update Text Display
         const rmsElem = document.getElementById('rmsVal');
         const specHeader = document.getElementById('spectrumHeader');
         if (rmsElem) rmsElem.innerText = `${rms.toFixed(2)} M/S²`;
-        if (specHeader) specHeader.innerText = `SPECTRUM (PEAK: ${peakAmp.toFixed(2)} M/S² @ ${peakHz.toFixed(1)} HZ)`;
+        if (specHeader) specHeader.innerText = `SPECTRUM (PEAK: ${peakAmp.toFixed(2)} M/S² @ ${peakHz.toFixed(1)} HZ | 1X: ${freq1X} HZ)`;
+
+        // Cek Peringatan Warning/Danger
+        checkAlarmStatus(rms);
 
         // Simpan Data Log
-        logData.push({ timestamp: timeStr, rms, accX, accY, accZ, peakHz });
+        logData.push({ timestamp: timeStr, rms, accX, accY, accZ, peakHz, rpm: currentRPM });
 
-        // Update 3 Grafik Streaming
+        // Push Data ke Grafik
         pushDataToChart(chartWaveform, timeStr, [accZ]);
         pushDataToChart(chart3Axis, timeStr, [accX, accY, accZ]);
         pushDataToChart(chartRMS, timeStr, [rms]);
 
-        // Perhitungan & Update Grafik Harmonis FFT
+        // Update Spektrum FFT
         const amp1X   = parseFloat((peakAmp * 0.85).toFixed(2));
         const amp2X   = parseFloat((peakAmp * 0.40).toFixed(2));
         const amp3X   = parseFloat((peakAmp * 0.15).toFixed(2));
@@ -257,13 +260,12 @@ function onDataReceived(jsonString) {
     }
 }
 
-// Ekspor Log CSV
 function downloadCSV() {
     if (logData.length === 0) return alert("Belum ada data terekam!");
     
-    let csv = "data:text/csv;charset=utf-8,Timestamp;RMS_ms2;AccX;AccY;AccZ;PeakHz\n";
+    let csv = "data:text/csv;charset=utf-8,Timestamp;RMS_ms2;AccX;AccY;AccZ;PeakHz;RPM\n";
     logData.forEach(r => {
-        csv += `${r.timestamp};${r.rms.toString().replace('.',',')};${r.accX.toString().replace('.',',')};${r.accY.toString().replace('.',',')};${r.accZ.toString().replace('.',',')};${r.peakHz.toString().replace('.',',')}\n`;
+        csv += `${r.timestamp};${r.rms.toString().replace('.',',')};${r.accX.toString().replace('.',',')};${r.accY.toString().replace('.',',')};${r.accZ.toString().replace('.',',')};${r.peakHz.toString().replace('.',',')};${r.rpm}\n`;
     });
     
     const link = document.createElement("a");
