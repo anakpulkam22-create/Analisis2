@@ -6,7 +6,8 @@ let bleCharacteristic;
 let logData = [];
 const MAX_POINTS = 20;
 
-// Variabel Kontrol Simulasi
+// Variabel Kontrol Status Sistem
+let isRunning = true;
 let isSimulating = false;
 let simulationInterval = null;
 
@@ -52,7 +53,7 @@ const chart3Axis = new Chart(document.getElementById('chart3Axis'), {
     options: chartCtxOptions
 });
 
-// 3. Grafik Spektrum Harmonis Spindle & Bearing (Curved Waveform Area)
+// 3. Grafik Spektrum Harmonis Spindle & Bearing
 const chartFFT = new Chart(document.getElementById('chartFFT'), {
     type: 'line',
     data: { 
@@ -63,7 +64,7 @@ const chartFFT = new Chart(document.getElementById('chartFFT'), {
             borderColor: '#ff9800',
             backgroundColor: 'rgba(255, 152, 0, 0.25)',
             borderWidth: 2,
-            tension: 0.4, // Kurva melengkung halus
+            tension: 0.4,
             fill: true,
             pointBackgroundColor: '#ffffff',
             pointRadius: 4
@@ -108,22 +109,32 @@ async function connectBLE() {
         });
 
         const statusElem = document.getElementById('statusText');
-        statusElem.innerText = 'CONNECTED';
-        statusElem.className = 'status-badge status-connected';
+        if (statusElem) {
+            statusElem.innerText = 'CONNECTED';
+            statusElem.className = 'status-badge status-connected';
+        }
     } catch (err) {
         alert("Koneksi BLE Gagal: " + err);
     }
 }
 
-// Pengiriman Perintah via BLE
+// Pengiriman Perintah via BLE (Handled Aman)
 async function sendCommand(cmd) {
+    if (cmd === 'START') {
+        isRunning = true;
+    } else if (cmd === 'STOP') {
+        isRunning = false;
+    }
+
     if (bleCharacteristic) {
-        const encoder = new TextEncoder();
-        await bleCharacteristic.writeValue(encoder.encode(cmd));
-    } else if (isSimulating) {
-        console.log("Mode Simulasi Perintah:", cmd);
-    } else {
-        alert("Hubungkan BLE atau aktifkan Simulasi terlebih dahulu!");
+        try {
+            const encoder = new TextEncoder();
+            await bleCharacteristic.writeValue(encoder.encode(cmd));
+        } catch (e) {
+            console.error("Gagal mengirim perintah BLE:", e);
+        }
+    } else if (!isSimulating) {
+        alert("Sistem dalam mode terpisah. Hubungkan BLE atau aktifkan mode Simulasi!");
     }
 }
 
@@ -138,12 +149,17 @@ function toggleSimulation() {
 
 function startSimulation() {
     isSimulating = true;
+    isRunning = true;
     const statusElem = document.getElementById('statusText');
-    statusElem.innerText = 'SIMULATION MODE';
-    statusElem.className = 'status-badge status-connected';
+    if (statusElem) {
+        statusElem.innerText = 'SIMULATION MODE';
+        statusElem.className = 'status-badge status-connected';
+    }
 
     let t = 0;
     simulationInterval = setInterval(() => {
+        if (!isRunning) return; // Hentikan pembaruan jika tombol STOP ditekan
+
         t += 0.1;
         const simAccX = (Math.sin(t * 2) * 0.8 + (Math.random() - 0.5) * 0.3).toFixed(2);
         const simAccY = (Math.cos(t * 1.5) * 0.6 + (Math.random() - 0.5) * 0.2).toFixed(2);
@@ -170,12 +186,16 @@ function stopSimulation() {
     isSimulating = false;
     if (simulationInterval) clearInterval(simulationInterval);
     const statusElem = document.getElementById('statusText');
-    statusElem.innerText = 'DISCONNECTED';
-    statusElem.className = 'status-badge status-disconnected';
+    if (statusElem) {
+        statusElem.innerText = 'DISCONNECTED';
+        statusElem.className = 'status-badge status-disconnected';
+    }
 }
 
 // Pemrosesan Data JSON Masuk
 function onDataReceived(jsonString) {
+    if (!isRunning) return; // Jangan update grafik jika status STOP
+
     try {
         const data = JSON.parse(jsonString);
 
@@ -188,8 +208,10 @@ function onDataReceived(jsonString) {
         const timeStr = new Date().toLocaleTimeString('id-ID');
 
         // Update Teks Realtime
-        document.getElementById('rmsVal').innerText = `${rms.toFixed(2)} M/S²`;
-        document.getElementById('spectrumHeader').innerText = `SPECTRUM (PEAK: ${peakAmp.toFixed(2)} M/S² @ ${peakHz.toFixed(1)} HZ)`;
+        const rmsElem = document.getElementById('rmsVal');
+        const specHeader = document.getElementById('spectrumHeader');
+        if (rmsElem) rmsElem.innerText = `${rms.toFixed(2)} M/S²`;
+        if (specHeader) specHeader.innerText = `SPECTRUM (PEAK: ${peakAmp.toFixed(2)} M/S² @ ${peakHz.toFixed(1)} HZ)`;
 
         // Simpan Data Log
         logData.push({ timestamp: timeStr, rms, accX, accY, accZ, peakHz });
